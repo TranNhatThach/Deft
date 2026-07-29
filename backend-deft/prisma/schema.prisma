@@ -1,0 +1,156 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum CategoryType {
+  expense
+  income
+}
+
+enum BudgetPeriodStatus {
+  open
+  closed
+}
+
+enum TransactionType {
+  expense
+  income
+}
+
+enum NotificationType {
+  threshold_alert
+  period_reminder
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique @db.VarChar(255)
+  password_hash String         @db.VarChar(255)
+  display_name  String         @db.VarChar(255)
+  currency      String         @default("VND") @db.VarChar(10)
+  created_at    DateTime       @default(now()) @db.Timestamptz
+  updated_at    DateTime       @updatedAt @db.Timestamptz
+
+  refresh_tokens RefreshToken[]
+  categories     Category[]
+  budget_periods BudgetPeriod[]
+  transactions   Transaction[]
+  notifications  Notification[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  user_id    String    @db.Uuid
+  token_hash String    @db.VarChar(255)
+  expires_at DateTime  @db.Timestamptz
+  revoked_at DateTime? @db.Timestamptz
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Category {
+  id         String       @id @default(uuid()) @db.Uuid
+  user_id    String       @db.Uuid
+  name       String       @db.VarChar(255)
+  icon       String?      @db.VarChar(100)
+  type       CategoryType
+  created_at DateTime     @default(now()) @db.Timestamptz
+  updated_at DateTime     @updatedAt @db.Timestamptz
+
+  user         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  budgets      Budget[]
+  transactions Transaction[]
+  alert_logs   AlertLog[]
+
+  @@map("categories")
+}
+
+model BudgetPeriod {
+  id          String             @id @default(uuid()) @db.Uuid
+  user_id     String             @db.Uuid
+  start_date  DateTime           @db.Date
+  end_date    DateTime           @db.Date
+  status      BudgetPeriodStatus @default(open)
+  total_limit Decimal            @db.Decimal(14, 2)
+  created_at  DateTime           @default(now()) @db.Timestamptz
+
+  user         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  budgets      Budget[]
+  transactions Transaction[]
+  alert_logs   AlertLog[]
+
+  @@map("budget_periods")
+}
+
+model Budget {
+  id               String  @id @default(uuid()) @db.Uuid
+  budget_period_id String  @db.Uuid
+  category_id      String  @db.Uuid
+  limit_amount     Decimal @db.Decimal(14, 2)
+  spent_amount     Decimal @default(0) @db.Decimal(14, 2)
+
+  budget_period BudgetPeriod @relation(fields: [budget_period_id], references: [id], onDelete: Cascade)
+  category      Category     @relation(fields: [category_id], references: [id], onDelete: Restrict)
+
+  @@unique([budget_period_id, category_id])
+  @@index([budget_period_id, category_id])
+  @@map("budgets")
+}
+
+model Transaction {
+  id               String          @id @default(uuid()) @db.Uuid
+  user_id          String          @db.Uuid
+  category_id      String          @db.Uuid
+  budget_period_id String?         @db.Uuid
+  amount           Decimal         @db.Decimal(14, 2)
+  type             TransactionType
+  note             String?         @db.VarChar(500)
+  transaction_date DateTime        @db.Timestamptz
+  created_at       DateTime        @default(now()) @db.Timestamptz
+  updated_at       DateTime        @updatedAt @db.Timestamptz
+
+  user          User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  category      Category      @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  budget_period BudgetPeriod? @relation(fields: [budget_period_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, budget_period_id])
+  @@index([category_id])
+  @@map("transactions")
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  user_id    String           @db.Uuid
+  type       NotificationType
+  title      String           @db.VarChar(255)
+  message    String           @db.Text
+  is_read    Boolean          @default(false)
+  metadata   Json?            @db.JsonB
+  created_at DateTime         @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AlertLog {
+  id               String  @id @default(uuid()) @db.Uuid
+  budget_period_id String  @db.Uuid
+  category_id      String? @db.Uuid
+  threshold        Int
+
+  budget_period BudgetPeriod @relation(fields: [budget_period_id], references: [id], onDelete: Cascade)
+  category      Category?    @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@unique([budget_period_id, category_id, threshold])
+  @@map("alert_logs")
+}
