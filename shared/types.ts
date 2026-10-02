@@ -45,6 +45,7 @@ export interface BudgetPeriod {
   end_date: string;   // YYYY-MM-DD
   status: BudgetPeriodStatus;
   total_limit: number;
+  formatted_total_limit?: string;
   created_at: string;
 }
 
@@ -54,6 +55,9 @@ export interface Budget {
   category_id: string;
   limit_amount: number;
   spent_amount: number;
+  formatted_limit?: string;
+  formatted_spent?: string;
+  formatted_remaining?: string;
   // Computed field for UI
   category?: Category;
   percent_used?: number;
@@ -68,6 +72,8 @@ export interface Transaction {
   category_id: string;
   budget_period_id?: string | null;
   amount: number;
+  formatted_amount?: string;
+  currency?: string;
   type: TransactionType;
   note?: string | null;
   transaction_date: string; // ISO String or YYYY-MM-DD
@@ -91,6 +97,13 @@ export interface Notification {
     threshold?: number;
     percent?: number;
     budget_period_id?: string;
+    total_spent?: number;
+    total_limit?: number;
+    days_passed?: number;
+    burn_rate_per_day?: number;
+    forecast_days_left?: number;
+    period_days_left?: number;
+    [key: string]: any;
   } | null;
   created_at: string;
 }
@@ -158,8 +171,20 @@ export interface CreateBudgetPeriodDto {
   total_limit: number;
 }
 
+export interface UpdateBudgetPeriodDto {
+  total_limit?: number;
+  start_date?: string;
+  end_date?: string;
+}
+
 // Budgets
 export interface UpsertBudgetDto {
+  category_id: string;
+  limit_amount: number;
+}
+
+export interface CreateBudgetDto {
+  budget_period_id: string;
   category_id: string;
   limit_amount: number;
 }
@@ -175,6 +200,10 @@ export interface CategoryBudgetSummary {
   limit_amount: number;
   spent_amount: number;
   percent_used: number;
+  formatted_limit?: string;
+  formatted_spent?: string;
+  remaining_amount?: number;
+  formatted_remaining?: string;
 }
 
 export interface BudgetPeriodSummaryResponse {
@@ -183,6 +212,9 @@ export interface BudgetPeriodSummaryResponse {
   total_spent: number;
   remaining: number;
   percent_used: number;
+  formatted_total_limit?: string;
+  formatted_total_spent?: string;
+  formatted_remaining?: string;
   by_category: CategoryBudgetSummary[];
 }
 
@@ -205,10 +237,26 @@ export interface UpdateTransactionDto {
 
 export interface QueryTransactionsDto {
   category_id?: string;
+  type?: TransactionType;
   from?: string;
   to?: string;
   page?: number;
   limit?: number;
+}
+
+// Incomes (Dedicated DTOs)
+export interface CreateIncomeDto {
+  category_id: string;
+  amount: number;
+  note?: string;
+  transaction_date: string;
+}
+
+export interface UpdateIncomeDto {
+  category_id?: string;
+  amount?: number;
+  note?: string;
+  transaction_date?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -246,17 +294,23 @@ export const API_PATHS = {
   },
   BUDGET_PERIODS: {
     BASE: '/budget-periods',
+    BY_ID: (id: string) => `/budget-periods/${id}`,
     CURRENT: '/budget-periods/current',
     CLOSE: (id: string) => `/budget-periods/${id}/close`,
     BUDGETS: (id: string) => `/budget-periods/${id}/budgets`,
     SUMMARY: (id: string) => `/budget-periods/${id}/summary`,
   },
   BUDGETS: {
+    BASE: '/budgets',
     BY_ID: (id: string) => `/budgets/${id}`,
   },
   TRANSACTIONS: {
     BASE: '/transactions',
     BY_ID: (id: string) => `/transactions/${id}`,
+  },
+  INCOMES: {
+    BASE: '/incomes',
+    BY_ID: (id: string) => `/incomes/${id}`,
   },
   NOTIFICATIONS: {
     BASE: '/notifications',

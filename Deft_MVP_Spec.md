@@ -6,6 +6,104 @@ Phạm vi MVP: bỏ Redis/BullMQ, Firebase FCM, Email Provider, WebSocket/SSE, S
 
 ## 1. Data Model / Schema
 
+### Sơ đồ Thực thể Mối quan hệ (ER Diagram)
+
+```mermaid
+erDiagram
+    users ||--o{ refresh_tokens : "has"
+    users ||--o{ categories : "owns"
+    users ||--o{ budget_periods : "creates"
+    users ||--o{ transactions : "makes"
+    users ||--o{ notifications : "receives"
+    
+    budget_periods ||--o{ budgets : "contains"
+    budget_periods ||--o{ transactions : "tracks"
+    budget_periods ||--o{ alert_logs : "logs"
+    
+    categories ||--o{ budgets : "allocated_in"
+    categories ||--o{ transactions : "categorizes"
+    categories ||--o{ alert_logs : "triggers"
+
+    users {
+        uuid id PK
+        varchar email UK
+        varchar password_hash
+        varchar display_name
+        varchar currency
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        varchar token_hash
+        timestamptz expires_at
+        timestamptz revoked_at
+    }
+
+    categories {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar icon
+        enum type
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    budget_periods {
+        uuid id PK
+        uuid user_id FK
+        date start_date
+        date end_date
+        enum status
+        numeric total_limit
+        timestamptz created_at
+    }
+
+    budgets {
+        uuid id PK
+        uuid budget_period_id FK
+        uuid category_id FK
+        numeric limit_amount
+        numeric spent_amount
+    }
+
+    transactions {
+        uuid id PK
+        uuid user_id FK
+        uuid category_id FK
+        uuid budget_period_id FK
+        numeric amount
+        enum type
+        varchar note
+        timestamptz transaction_date
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    notifications {
+        uuid id PK
+        uuid user_id FK
+        enum type
+        varchar title
+        varchar message
+        boolean is_read
+        jsonb metadata
+        timestamptz created_at
+    }
+
+    alert_logs {
+        uuid id PK
+        uuid budget_period_id FK
+        uuid category_id FK "nullable"
+        int threshold
+    }
+```
+
+### Chi tiết các bảng (Tables)
+
 ### `users`
 | Cột | Kiểu | Ghi chú |
 |---|---|---|

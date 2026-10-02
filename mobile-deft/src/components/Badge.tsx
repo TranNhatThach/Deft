@@ -5,7 +5,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { getBudgetColor, COLORS } from '../constants/theme';
 
-type BadgeType = 'over_budget' | 'warning_80' | 'warning_50' | 'transaction_alert' | 'active' | 'custom';
+type BadgeType = 'over_budget' | 'warning_80' | 'warning_70' | 'warning_50' | 'transaction_alert' | 'active' | 'custom';
 
 interface BadgeProps {
   percent?: number;
@@ -26,6 +26,7 @@ function resolveBadge(props: BadgeProps) {
     const map: Record<string, { bg: string; text: string; label: string }> = {
       over_budget: { bg: COLORS.overBudget, text: '#FFF', label: 'VƯỢT MỨC' },
       warning_80: { bg: COLORS.critical, text: '#FFF', label: '80%' },
+      warning_70: { bg: COLORS.warning, text: '#FFF', label: '70%' },
       warning_50: { bg: COLORS.attention, text: '#1E2233', label: '50%' },
       transaction_alert: { bg: '#EAEFFE', text: COLORS.primary, label: 'BIẾN ĐỘNG' },
       active: { bg: COLORS.primary, text: '#FFF', label: 'Đang chạy' },

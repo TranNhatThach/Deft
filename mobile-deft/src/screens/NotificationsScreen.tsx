@@ -1,41 +1,89 @@
 /**
- * NotificationsScreen — Grouped by HÔM NAY / HÔM QUA with colored border cards.
+ * NotificationsScreen — Grouped notifications with mark-read actions.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '../components/Header';
 import { Icon } from '../components/Icon';
 import { Badge } from '../components/Badge';
 import { COLORS, RADII } from '../constants/theme';
-import { USE_MOCK } from '../api/apiClient';
-import { MockServer } from '../api/mockServer';
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../api/services/notificationService';
+import type { NotificationListItem } from '../api/mappers';
 
 export const NotificationsScreen = ({ navigation }: any) => {
-  const [notifs, setNotifs] = useState<any[]>([]);
+  const [notifs, setNotifs] = useState<NotificationListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const data = USE_MOCK ? MockServer.getNotifications() : [];
-    setNotifs(data);
-    setLoading(false);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { items } = await listNotifications();
+      setNotifs(items);
+    } catch {
+      setError('Không tải được thông báo.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const todayNotifs = notifs.filter(n => n.group === 'today');
-  const yesterdayNotifs = notifs.filter(n => n.group === 'yesterday');
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData]),
+  );
 
-  const markAllRead = () => setNotifs(notifs.map(n => ({ ...n, isRead: true })));
+  const markAllRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setNotifs(notifs.map((n) => ({ ...n, isRead: true })));
+    } catch {
+      setError('Không thể đánh dấu đã đọc.');
+    }
+  };
+
+  const markOneRead = async (id: string) => {
+    try {
+      await markNotificationRead(id);
+      setNotifs(notifs.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const todayNotifs = notifs.filter((n) => n.group === 'today');
+  const yesterdayNotifs = notifs.filter((n) => n.group === 'yesterday');
+  const olderNotifs = notifs.filter((n) => n.group === 'older');
 
   return (
     <View style={s.container}>
-      <Header title="Deft Finance" showBack onBackPress={() => navigation.goBack()} rightActionText="Đánh dấu đã đọc" onRightActionPress={markAllRead} />
+      <Header
+        title="Deft Finance"
+        showBack
+        onBackPress={() => navigation.goBack()}
+        rightActionText="Đánh dấu đã đọc"
+        onRightActionPress={markAllRead}
+      />
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={s.pageTitle}>Trung tâm thông báo</Text>
+        {error ? <Text style={s.errorText}>{error}</Text> : null}
 
-        {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} /> : (
+        {loading ? (
+          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
+        ) : notifs.length === 0 ? (
+          <Text style={s.emptyText}>Chưa có thông báo nào.</Text>
+        ) : (
           <>
-            <NotifSection label="HÔM NAY" items={todayNotifs} navigation={navigation} />
-            <NotifSection label="HÔM QUA" items={yesterdayNotifs} navigation={navigation} />
+            <NotifSection label="HÔM NAY" items={todayNotifs} navigation={navigation} onRead={markOneRead} />
+            <NotifSection label="HÔM QUA" items={yesterdayNotifs} navigation={navigation} onRead={markOneRead} />
+            <NotifSection label="TRƯỚC ĐÓ" items={olderNotifs} navigation={navigation} onRead={markOneRead} />
           </>
         )}
       </ScrollView>
@@ -43,42 +91,59 @@ export const NotificationsScreen = ({ navigation }: any) => {
   );
 };
 
-// ─── Notification Section ────────────────────────────────
-function NotifSection({ label, items, navigation }: { label: string; items: any[]; navigation: any }) {
+function NotifSection({
+  label,
+  items,
+  navigation,
+  onRead,
+}: {
+  label: string;
+  items: NotificationListItem[];
+  navigation: any;
+  onRead: (id: string) => void;
+}) {
   if (!items.length) return null;
   return (
     <View style={{ marginBottom: 20 }}>
       <Text style={s.sectionTitle}>{label}</Text>
-      {items.map(n => <NotifCard key={n.id} notif={n} navigation={navigation} />)}
+      {items.map((n) => (
+        <NotifCard key={n.id} notif={n} navigation={navigation} onRead={() => onRead(n.id)} />
+      ))}
     </View>
   );
 }
 
-// ─── Notification Card ───────────────────────────────────
 const BORDER_COLORS: Record<string, string> = {
-  over_budget: COLORS.overBudget, warning_80: COLORS.warning,
-  warning_50: COLORS.attention, transaction_alert: COLORS.primary,
-};
-const CIRCLE_BGS: Record<string, string> = {
-  over_budget: '#FFEFEF', warning_80: '#FFF6E5',
-  warning_50: '#FFFDEB', transaction_alert: '#EEF2FF',
-};
-const ICON_COLORS: Record<string, string> = {
-  over_budget: COLORS.overBudget, warning_80: COLORS.warning,
-  warning_50: COLORS.attention, transaction_alert: COLORS.primary,
+  over_budget: COLORS.overBudget,
+  warning_80: COLORS.critical,
+  warning_70: COLORS.warning,
+  warning_50: COLORS.attention,
+  transaction_alert: COLORS.primary,
 };
 
-function NotifCard({ notif, navigation }: { notif: any; navigation: any }) {
+function NotifCard({
+  notif,
+  navigation,
+  onRead,
+}: {
+  notif: NotificationListItem;
+  navigation: any;
+  onRead: () => void;
+}) {
   const borderColor = BORDER_COLORS[notif.type] || COLORS.border;
-  const circleBg = CIRCLE_BGS[notif.type] || '#F3F5FA';
-  const iconColor = ICON_COLORS[notif.type] || COLORS.primary;
   const iconName = notif.type === 'transaction_alert' ? 'zap' : 'alertTriangle';
 
   return (
-    <View style={[s.card, { borderLeftColor: borderColor }]}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={[s.card, { borderLeftColor: borderColor }, !notif.isRead && s.unreadCard]}
+      onPress={onRead}
+    >
       <View style={s.cardHeader}>
         <View style={s.topLeft}>
-          <View style={[s.iconCircle, { backgroundColor: circleBg }]}><Icon name={iconName} size={18} color={iconColor} /></View>
+          <View style={[s.iconCircle, { backgroundColor: '#F3F5FA' }]}>
+            <Icon name={iconName} size={18} color={borderColor} />
+          </View>
           <Text style={s.timeText}>{notif.createdAt}</Text>
         </View>
         <Badge type={notif.type} />
@@ -97,12 +162,7 @@ function NotifCard({ notif, navigation }: { notif: any; navigation: any }) {
           </TouchableOpacity>
         </View>
       )}
-      {notif.type === 'transaction_alert' && (
-        <TouchableOpacity style={[s.secondaryBtn, { width: 130, marginTop: 12 }]} onPress={() => navigation.navigate('TransactionsTab')}>
-          <Text style={s.secondaryBtnText}>Xem chi tiết</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -111,7 +171,16 @@ const s = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 40 },
   pageTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.8, marginBottom: 10 },
-  card: { backgroundColor: COLORS.card, borderRadius: RADII.card, padding: 16, marginBottom: 12, shadowColor: '#1E2233', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2, borderLeftWidth: 4, borderLeftColor: COLORS.border },
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.border,
+  },
+  unreadCard: { backgroundColor: '#FAFBFF' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   topLeft: { flexDirection: 'row', alignItems: 'center' },
   iconCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
@@ -123,4 +192,6 @@ const s = StyleSheet.create({
   primaryBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   secondaryBtn: { flex: 1, backgroundColor: '#EEF2FF', paddingVertical: 10, borderRadius: RADII.button, alignItems: 'center' },
   secondaryBtnText: { color: COLORS.primary, fontSize: 13, fontWeight: '700' },
+  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: 24, fontSize: 14 },
+  errorText: { color: COLORS.overBudget, marginBottom: 12, fontSize: 13 },
 });

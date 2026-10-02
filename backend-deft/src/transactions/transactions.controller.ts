@@ -28,6 +28,14 @@ export class TransactionsController {
     return this.transactionsService.findAll(userId, query);
   }
 
+  @Get(':id')
+  async findOne(
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.transactionsService.findOne(userId, id);
+  }
+
   @Post()
   async create(
     @CurrentUser('userId') userId: string,
